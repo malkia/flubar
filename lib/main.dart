@@ -3,9 +3,22 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_driver/driver_extension.dart';
 
+// Copied from flutter/examples/flutter_gallery/lib/main.dart
+//
+// Sets a platform override for desktop to avoid exceptions. See
+// https://flutter.dev/desktop#target-platform-override for more info.
+// TODO(gspencergoog): Remove once TargetPlatform includes all desktop platforms.
+// This is only included in the Gallery because Flutter's testing infrastructure
+// uses the Gallery for various tests, and this allows us to test on desktop
+// platforms that aren't yet supported in TargetPlatform.
+void _enablePlatformOverrideForDesktop() {
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+    debugDefaultTargetPlatformOverride = TargetPlatform.fuchsia;
+  }
+}
+
 void main() {
-  // See https://github.com/flutter/flutter/wiki/Desktop-shells#target-platform-override
-  debugDefaultTargetPlatformOverride = TargetPlatform.fuchsia;
+  _enablePlatformOverrideForDesktop();
   
   // Enable integration testing with the Flutter Driver extension.
   // See https://flutter.dev/testing/ for more info.
