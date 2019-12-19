@@ -1,7 +1,12 @@
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_driver/driver_extension.dart';
 
 void main() {
+  // See https://github.com/flutter/flutter/wiki/Desktop-shells#target-platform-override
+  debugDefaultTargetPlatformOverride = TargetPlatform.fuchsia;
+  
   // Enable integration testing with the Flutter Driver extension.
   // See https://flutter.dev/testing/ for more info.
   enableFlutterDriverExtension();
