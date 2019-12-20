@@ -3,10 +3,10 @@ import 'dart:math';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_driver/driver_extension.dart';
 
 class TimeSpan {
   final double startTime;
@@ -187,7 +187,7 @@ void main() async {
   });
 
   var totalSpan =
-      TimeSpan(startTime: totalMinTime, duration: totalMaxTime - totalMinTime);
+  TimeSpan(startTime: totalMinTime, duration: totalMaxTime - totalMinTime);
 
   _spans = spans;
   _totalSpan = totalSpan;
@@ -226,58 +226,88 @@ class MyApp extends StatelessWidget {
 Vertices _verts;
 double _scale = 1.0;
 Offset _translation = Offset(0, 0);
+PointerScrollEvent _scrollEvent;
 
 class SomePainter extends CustomPainter {
   void _drawSomeVertices(Canvas canvas, Size size) {
+    //_scale = 1.0;
+    //if( _random.nextInt(10) == 0 ) {
+    //_verts = null;
+    //}
     if (_verts == null) {
-      var numRects = 50000;
+      var numRects = 15000;
       // 2 triangles, of 3 vertices, of 2 coordinates
-      var numCoords = 2 * 3 * 2 * numRects;
-      var xy = Float32List(numCoords);
-      var rgb = Int32List(numCoords);
+      var numPoints = 2 * 3 * 2 * numRects;
+      var xy = Float32List(numPoints * 2 /* for each coord */);
+      var rgb = Int32List(numPoints);
       for (var r = 0; r < numRects; r++) {
-        var left = _random.nextDouble() * size.width * 9 / 10;
-        var top = _random.nextDouble() * size.height * 9 / 10;
-        var width = _random.nextDouble() * size.width / 100;
-        var height = _random.nextDouble() * size.height / 100;
+        var left = ((_random.nextDouble() * size.width * 9 / 10) ~/ 50) * 50.0;
+        var top = ((_random.nextDouble() * size.height * 9 / 10) ~/ 50) * 30.0;
+        var width = _random.nextDouble() * size.width / 50;
+        var height = _random.nextDouble() * size.height / 50;
         var xyo = 12 * r;
         var co = 6 * r;
-        rgb[co + 0] = _random.nextInt(256) | (0xFF << 24);
+        var color = Color.fromARGB(_random.nextInt(255 - 196) + 196,
+            _random.nextInt(255), _random.nextInt(255), _random.nextInt(255));
+        rgb[co + 0] = color.value;
         xy[xyo + 0] = left;
         xy[xyo + 1] = top;
-        rgb[co + 1] = (_random.nextInt(256) << 8) | (0xFF << 24);
+        rgb[co + 1] = color.value;
         xy[xyo + 2] = left;
         xy[xyo + 3] = top + height;
-        rgb[co + 2] = (_random.nextInt(256) << 16) | (0xFF << 24);
+        rgb[co + 2] = color.value;
         xy[xyo + 4] = left + width;
         xy[xyo + 5] = top + height;
-        rgb[co + 3] = _random.nextInt(256) | (0xFF << 24);
+        rgb[co + 3] = color.value;
         xy[xyo + 6] = left + width;
         xy[xyo + 7] = top + height;
-        rgb[co + 4] = (_random.nextInt(256) << 8) | (0xFF << 24);
+        rgb[co + 4] = color.value;
         xy[xyo + 8] = left + width;
         xy[xyo + 9] = top;
-        rgb[co + 5] = (_random.nextInt(256) << 16) | (0xFF << 24);
+        rgb[co + 5] = color.value;
         xy[xyo + 10] = left;
         xy[xyo + 11] = top;
       }
       _verts = Vertices.raw(VertexMode.triangles, xy, colors: rgb);
     }
     var paint = Paint();
-    paint.color = Color.fromARGB(
-        255, _random.nextInt(256), _random.nextInt(256), _random.nextInt(256));
-    paint.style = PaintingStyle.stroke;
-    paint.blendMode = BlendMode.values[_random.nextInt(BlendMode.values.length)];
+
+    //paint.color = Color.fromARGB(
+    //    255, _random.nextInt(256), _random.nextInt(256), _random.nextInt(256));
+    //paint.style = PaintingStyle.fill;
+    //paint.blendMode = BlendMode.color;
     canvas.save();
-    canvas.scale(_scale);
-    canvas.translate(_translation.dx, _translation.dy);
-    canvas.drawVertices(_verts,
-        BlendMode.values[_random.nextInt(BlendMode.values.length)], paint);
+    //canvas.translate(size.width*4/5, size.height/4);
+    //canvas.translate(-size.width/2, -size.height/2);
+
+    if( _scrollEvent != null ) {
+      print(_scrollEvent);
+      print("before $_translation");
+      //_translation = _scrollEvent.localPosition;
+      print(" after $_translation");
+      var scrollAmount = _scrollEvent.scrollDelta.dy.sign;
+      _translation = _translation.translate( -scrollAmount*_scrollEvent.localPosition.dx / _scale, -scrollAmount*_scrollEvent.localPosition.dy / _scale );
+      _scale += scrollAmount;
+      _scrollEvent = null;
+    }
+    print("scale $_scale");
+    print(_translation);
+    bool reset = false;
+//    reset = true;
+    if( reset ) {
+      _translation = Offset(0, 0);
+      _scale = 1.5;
+    }
+
+    canvas.translate(_translation.dx - 100 * _scale , _translation.dy  - 100 * _scale);
+    canvas.scale(_scale, _scale);
+    canvas.drawVertices(_verts, BlendMode.color, paint);
     canvas.restore();
 
-    _translation = _translation.translate( _random.nextDouble() * 4.0 -2.0, _random.nextDouble() * 4.0 -2.0);
-    _scale += (_random.nextDouble() * 2.0 - 1.0) / 10000.0;
-    _scale *= 0.99995;
+//    _translation = _translation.translate(
+//        _random.nextDouble() * 4.0 - 2.0, _random.nextDouble() * 4.0 - 2.0);
+    //_scale += (_random.nextDouble() * 2.0 - 1.0) / 10000.0;
+    //_scale *= 0.99995;
   }
 
   @override
@@ -317,7 +347,7 @@ class SomePainter extends CustomPainter {
             (span.startTime - totalStartTime) * size.width / totalDuration;
         var width = span.duration * size.width / totalDuration;
         var rect =
-            Rect.fromLTWH(start, y + stackUsed * height, width, height - 1);
+        Rect.fromLTWH(start, y + stackUsed * height, width, height - 1);
         paint.color =
             Color.fromARGB(255, cnt % 256, cnt * 5 % 256, cnt * 7 % 256);
         canvas.drawRect(rect, paint);
@@ -330,28 +360,71 @@ class SomePainter extends CustomPainter {
   @override
   bool shouldRepaint(CustomPainter oldDelegate) {
     //print("shouldRepaint");
-    return false;
-  }
-
-  @override
-  bool shouldRebuildSemantics(CustomPainter oldDelegate) {
-    //print("shouldRebuildSemantics");
-    return false;
-  }
-
-  @override
-  bool hitTest(Offset position) {
-    return null;
+    return true;
   }
 }
 
-class LotsOfThings extends StatelessWidget {
+class LotsOfThings extends StatefulWidget {
+  LotsOfThings({Key key, this.title}) : super(key: key);
+
+  // This widget is the home page of your application. It is stateful, meaning
+  // that it has a State object (defined below) that contains fields that affect
+  // how it looks.
+
+  // This class is the configuration for the state. It holds the values (in this
+  // case the title) provided by the parent (in this case the App widget) and
+  // used by the build method of the State. Fields in a Widget subclass are
+  // always marked "final".
+
+  final String title;
+
+  @override
+  LotsOfThingsState createState() => LotsOfThingsState();
+}
+
+class LotsOfThingsState extends State<LotsOfThings> {
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(MediaQuery.of(context).size.width,
-          MediaQuery.of(context).size.height - 200),
-      painter: SomePainter(),
+    return new Listener(
+//      behavior: HitTestBehavior.translucent,
+//      onPointerCancel: ((var p) => print("cancel $p")),
+//      onPointerDown: ((var p) => print("cancel $p")),
+      onPointerSignal: ((PointerSignalEvent signalEvent) {
+          PointerScrollEvent scrollEvent = signalEvent;
+          if( scrollEvent != null ) {
+            setState(() {
+              _scrollEvent = scrollEvent;
+            });
+          }
+      }),
+//      onPointerUp: ((var p) => print("cancel $p")),
+//      onPointerMove: ((var p) {
+//        _scale += p.delta.dy;
+//        print("cancel $p");
+//      }),
+      child: GestureDetector(
+        //        behavior: HitTestBehavior.opaque,
+          onPanUpdate: (var d) {
+            setState(() {
+              _translation = _translation.translate(d.delta.dx, d.delta.dy);
+            });
+            //print(d);
+          },
+//        onVerticalDragCancel: () => print("cancel"),
+//        onVerticalDragDown: (var d) => print(d),
+//        onVerticalDragEnd: (var d) => print(d),
+//        onVerticalDragStart: (var d) => print(d),
+          child: CustomPaint(
+            size: Size(MediaQuery
+                .of(context)
+                .size
+                .width,
+                MediaQuery
+                    .of(context)
+                    .size
+                    .height - 200),
+            painter: SomePainter(),
+          )),
     );
   }
 }
@@ -429,7 +502,10 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             Text(
               '$_counter',
-              style: Theme.of(context).textTheme.display1,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .display1,
             ),
             LotsOfThings(),
           ],
@@ -439,7 +515,32 @@ class _MyHomePageState extends State<MyHomePage> {
         onPressed: _incrementCounter,
         tooltip: 'Increment',
         child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
+      // This trailing comma makes auto-formatting nicer for build methods.
+//      bottomNavigationBar: BottomNavigationBar(
+//          onTap: ((int which) {
+//            print("$which");
+//            switch (which) {
+//              case 0:
+//                break;
+//              case 1:
+//                break;
+//            }
+//          }),
+//          items: const <BottomNavigationBarItem>[
+//            const BottomNavigationBarItem(
+//              title: Text("Test"),
+//              icon: Icon(Icons.access_alarm),
+//              activeIcon: Icon(Icons.access_time),
+//              backgroundColor: Colors.blueGrey,
+//            ),
+//            const BottomNavigationBarItem(
+//              title: Text("Test2"),
+//              icon: Icon(Icons.access_alarm),
+//              activeIcon: Icon(Icons.access_time),
+//              backgroundColor: Colors.blueGrey,
+//            )
+//          ]),
     );
   }
 }
