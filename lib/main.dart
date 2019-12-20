@@ -1,14 +1,112 @@
 import 'dart:io';
 import 'dart:math';
 import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_driver/driver_extension.dart';
 
+class TimeSpan {
+  final double startTime;
+  final double duration;
+  final double endTime; // Calculated from startTime + duration
+
+  // int stackLevel
+  // int parentIndex
+  // int labelIndex
+
+  const TimeSpan({this.startTime, this.duration})
+      : assert(duration >= 0.0),
+        endTime = startTime + duration;
+
+  bool overlaps(TimeSpan other) {
+    return startTime <= other.startTime && other.startTime <= endTime ||
+        startTime <= other.endTime && other.endTime <= endTime;
+  }
+
+  bool contains(TimeSpan other) {
+    return startTime <= other.startTime &&
+        other.startTime <= endTime &&
+        startTime <= other.endTime &&
+        other.endTime <= endTime;
+  }
+}
+
 Random _random = Random();
 TimeSpan _totalSpan = null;
 Map<int, List<TimeSpan>> _spans = null;
+
+/*
+  List<TimeSpan> allSpans;
+
+  Map<int16, List<int8, List<int32>>>
+
+  For each thread (16 bit index)
+    for each stack level (8 bit index)
+       index to the timespan (32-bit)
+
+  We can use binary search to find [first .. last] index each thread
+  Although heuristic can be used here, since the timeline range is the same for all threads/stack levels.
+
+  timeLine.startTime
+  timeLine.endTime
+  timeLine.List<int16> index to threads to show
+
+  We need two indexes:
+
+  Sorted by startTime
+  Sorted by endTime
+
+  This would tell us, for any given timeline view where is the start visible index, and end visible index.
+
+  Float64x2List startAndEndTimeValues;
+  Int32List     labelIndexAndStackDepth;
+  Int32List     endTimeIndex;
+
+  Each thread, at each stack level:
+  Int32List   spanIndex;
+
+  // All time spans information:
+  // startTime and endTime, and string label.  
+  class TimeSpans {
+    // pair of start and end times, sorted by startTime
+    Float64x2List startAndEndTimes;
+    List<string> labels;
+    Int32List labelIndex;
+  }
+
+  // A single strip of timespan bars, at specific stack level
+  class TimeLineStrip {
+    Int32List startTimeIndex;
+    Int32List endTimeIndex;
+
+    int lowerBound(double starTime, TimeSpans timeSpans) {
+      int index = lowerBound(startTimeIndex, startTime, (Int32 a, Int32 b) {
+        var startTimeA = timeSpans[startTimeIndex[a]][0];
+        var startTimeA = timeSpans[startTimeIndex[a]][0];
+      });
+    }
+
+    int upperBound(double endTime) {
+    }
+  }
+
+  // The timeline for a single thread
+  class ThreadTimeLine {
+    int threadId;
+    bool collapsed;
+    // TimeLine strips for each stackLevel
+    // The max stack level is the timeLineStrips.length
+    List<TimeLineStrip> timeLineStrips;
+  }
+
+  class ProcessTimeLine {
+    int processId;
+    List<ThreadTimeLine> threadTimeLines; 
+  }
+*/
 
 // Copied from flutter/examples/flutter_gallery/lib/main.dart
 //
@@ -23,9 +121,9 @@ void _enablePlatformOverrideForDesktop() {
     debugDefaultTargetPlatformOverride = TargetPlatform.fuchsia;
   }
 
-  if(kIsWeb) {
-    WidgetsFlutterBinding.ensureInitialized();
-  }
+//  if(kIsWeb) {
+  WidgetsFlutterBinding.ensureInitialized();
+//  }
 }
 
 void main() async {
@@ -63,17 +161,14 @@ void main() async {
 
     double startTime = jsonSpan["ts"];
     double duration = jsonSpan["dur"];
-    String label = jsonSpan["name"];
+    //  String label = jsonSpan["name"];
     var span = TimeSpan(
-        startTime: startTime,
-        duration: duration,
-        label: SpanLabel(label: label));
-    if( !spans.containsKey(threadId) )
-      spans[threadId] = List<TimeSpan>();
+      startTime: startTime,
+      duration: duration,
+    );
+    if (!spans.containsKey(threadId)) spans[threadId] = List<TimeSpan>();
     spans[threadId].add(span);
   }
-
-  print(spans.length);
 
   var totalMinTime = double.infinity;
   var totalMaxTime = double.negativeInfinity;
@@ -87,15 +182,12 @@ void main() async {
       minTime = min(minTime, t.startTime);
       maxTime = max(maxTime, t.endTime);
     });
-    print(minTime);
-    print(maxTime);
     totalMinTime = min(totalMinTime, minTime);
     totalMaxTime = max(totalMaxTime, maxTime);
   });
 
-  print(totalMinTime);
-  print(totalMaxTime);
-  var totalSpan = TimeSpan(startTime: totalMinTime, duration: totalMaxTime - totalMinTime);
+  var totalSpan =
+      TimeSpan(startTime: totalMinTime, duration: totalMaxTime - totalMinTime);
 
   _spans = spans;
   _totalSpan = totalSpan;
@@ -131,65 +223,119 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class SpanLabel {
-  final String label;
-
-  const SpanLabel({this.label});
-}
-
-class TimeSpan {
-  final double startTime;
-  final double duration;
-  final double endTime;
-  final SpanLabel label;
-
-  const TimeSpan({this.startTime, this.duration, this.label})
-      : assert(duration >= 0.0),
-        endTime = startTime + duration;
-}
+Vertices _verts;
+double _scale = 1.0;
+Offset _translation = Offset(0, 0);
 
 class SomePainter extends CustomPainter {
+  void _drawSomeVertices(Canvas canvas, Size size) {
+    if (_verts == null) {
+      var numRects = 50000;
+      // 2 triangles, of 3 vertices, of 2 coordinates
+      var numCoords = 2 * 3 * 2 * numRects;
+      var xy = Float32List(numCoords);
+      var rgb = Int32List(numCoords);
+      for (var r = 0; r < numRects; r++) {
+        var left = _random.nextDouble() * size.width * 9 / 10;
+        var top = _random.nextDouble() * size.height * 9 / 10;
+        var width = _random.nextDouble() * size.width / 100;
+        var height = _random.nextDouble() * size.height / 100;
+        var xyo = 12 * r;
+        var co = 6 * r;
+        rgb[co + 0] = _random.nextInt(256) | (0xFF << 24);
+        xy[xyo + 0] = left;
+        xy[xyo + 1] = top;
+        rgb[co + 1] = (_random.nextInt(256) << 8) | (0xFF << 24);
+        xy[xyo + 2] = left;
+        xy[xyo + 3] = top + height;
+        rgb[co + 2] = (_random.nextInt(256) << 16) | (0xFF << 24);
+        xy[xyo + 4] = left + width;
+        xy[xyo + 5] = top + height;
+        rgb[co + 3] = _random.nextInt(256) | (0xFF << 24);
+        xy[xyo + 6] = left + width;
+        xy[xyo + 7] = top + height;
+        rgb[co + 4] = (_random.nextInt(256) << 8) | (0xFF << 24);
+        xy[xyo + 8] = left + width;
+        xy[xyo + 9] = top;
+        rgb[co + 5] = (_random.nextInt(256) << 16) | (0xFF << 24);
+        xy[xyo + 10] = left;
+        xy[xyo + 11] = top;
+      }
+      _verts = Vertices.raw(VertexMode.triangles, xy, colors: rgb);
+    }
+    var paint = Paint();
+    paint.color = Color.fromARGB(
+        255, _random.nextInt(256), _random.nextInt(256), _random.nextInt(256));
+    paint.style = PaintingStyle.stroke;
+    paint.blendMode = BlendMode.values[_random.nextInt(BlendMode.values.length)];
+    canvas.save();
+    canvas.scale(_scale);
+    canvas.translate(_translation.dx, _translation.dy);
+    canvas.drawVertices(_verts,
+        BlendMode.values[_random.nextInt(BlendMode.values.length)], paint);
+    canvas.restore();
+
+    _translation = _translation.translate( _random.nextDouble() * 4.0 -2.0, _random.nextDouble() * 4.0 -2.0);
+    _scale += (_random.nextDouble() * 2.0 - 1.0) / 10000.0;
+    _scale *= 0.99995;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
+    _drawSomeVertices(canvas, size);
+    return;
     var paint = Paint();
     paint.strokeWidth = 1;
     paint.style = PaintingStyle.fill;
-    print(_totalSpan.duration);
+    //print(_totalSpan.duration);
     //if( _totalSpan.duration > 10000)
     //  _totalSpan = TimeSpan(startTime: _totalSpan.startTime, duration: 10000);
     //paint.blendMode = BlendMode.difference;
 
-    print("starttime ${_totalSpan.startTime}");
     var totalStartTime = max(226888674068.1, _totalSpan.startTime);
     var totalDuration = min(1250000, _totalSpan.duration);
     var height = size.height / _spans.length;
     double y = 0;
     int cnt = 0;
+    var stack = Int32List(1024);
+    var limit = 5;
     _spans.forEach((int threadId, List<TimeSpan> spans) {
-      for (var i = 0; i < spans.length; i ++ ) {
+      var stackUsed = 0;
+      var maxStackUsed = 0;
+      if (limit-- < 0) return;
+      for (var i = 0; i < spans.length; i++) {
         var span = spans[i];
-        var start = (span.startTime - totalStartTime) * size.width /
-            totalDuration;
+        while (stackUsed > 0) {
+          var parentIndex = stack[stackUsed - 1];
+          if (spans[parentIndex].contains(span)) break;
+          stackUsed--;
+        }
+        stack[stackUsed] = i;
+        stackUsed++;
+        maxStackUsed = max(maxStackUsed, stackUsed);
+        var start =
+            (span.startTime - totalStartTime) * size.width / totalDuration;
         var width = span.duration * size.width / totalDuration;
-        //print(start);
-        var rect = Rect.fromLTWH(start, y, width, height - 1 );
-        paint.color = Color.fromARGB(255, cnt % 256, cnt * 5 % 256, cnt * 7 % 256);
+        var rect =
+            Rect.fromLTWH(start, y + stackUsed * height, width, height - 1);
+        paint.color =
+            Color.fromARGB(255, cnt % 256, cnt * 5 % 256, cnt * 7 % 256);
         canvas.drawRect(rect, paint);
-        cnt ++;
+        cnt++;
       }
-      y += height;
+      y += height * (maxStackUsed + 1);
     });
   }
 
   @override
   bool shouldRepaint(CustomPainter oldDelegate) {
-    print("shouldRepaint");
+    //print("shouldRepaint");
     return false;
   }
 
   @override
   bool shouldRebuildSemantics(CustomPainter oldDelegate) {
-    print("shouldRebuildSemantics");
+    //print("shouldRebuildSemantics");
     return false;
   }
 
@@ -203,7 +349,8 @@ class LotsOfThings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: Size(MediaQuery.of(context).size.width, MediaQuery.of(context).size.height - 200 ),
+      size: Size(MediaQuery.of(context).size.width,
+          MediaQuery.of(context).size.height - 200),
       painter: SomePainter(),
     );
   }
