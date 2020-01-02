@@ -166,8 +166,8 @@ void main() async {
     String op = jsonSpan["ph"];
     if (op != "X") continue;
 
-    double startTime = jsonSpan["ts"];
-    double duration = jsonSpan["dur"];
+    double startTime = jsonSpan["ts"] / 1e5;
+    double duration = jsonSpan["dur"] / 1e5;
     //  String label = jsonSpan["name"];
     var span = TimeSpan(
       startTime: startTime,
@@ -342,7 +342,9 @@ class SomePainter extends CustomPainter {
     var totalStartTime = _totalSpan.startTime;
     var totalDuration = _totalSpan.duration;
     //var height = size.height / _spans.length * size.height / totalDuration;
-    var height = size.height / _spans.length * size.height / totalDuration;
+    var height = size.height / _spans.length;// * size.height / totalDuration;
+    //print(height);
+    //print(totalDuration);
     double y = 0;
     int cnt = 0;
     var stack = Int32List(1024);
@@ -362,8 +364,8 @@ class SomePainter extends CustomPainter {
         stackUsed++;
         maxStackUsed = max(maxStackUsed, stackUsed);
         var start =
-            (span.startTime - totalStartTime) * size.width / totalDuration;
-        var width = span.duration * size.width / totalDuration;
+            (span.startTime - totalStartTime);// * size.width / totalDuration;
+        var width = span.duration;// * size.width / totalDuration;
         var rect =
             Rect.fromLTWH(start, y + stackUsed * height, width, height - 1);
         paint.color =
@@ -422,9 +424,14 @@ class LotsOfThingsState extends State<LotsOfThings> {
     return Zoom(
         width: size.width,
         height: size.height,
-        // zoomSensibility: 200,
+        opacityScrollBars: 1.0,
+        scrollWeight: 64.0,
+        backgroundColor: Colors.amber[50],
+        canvasColor: Colors.amber[100],
+        //colorScrollBars: Colors.red,
+        zoomSensibility: 100.0,
         doubleTapZoom: true,
-        // centerOnScale: false,
+        centerOnScale: true,
         initZoom: 0.0,
         onPositionUpdate: (Offset position) {
           print(position);
