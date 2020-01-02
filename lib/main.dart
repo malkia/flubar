@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:zoom_widget/zoom_widget.dart';
 
 class TimeSpan {
   final double startTime;
@@ -33,6 +34,12 @@ class TimeSpan {
         other.endTime <= endTime;
   }
 }
+
+Offset _scale = Offset(1.0, 1.0);
+Offset _offset = Offset(0.0, 0.0);
+
+Offset _tempScale = Offset(1.0, 1.0);
+Offset _tempOffset = Offset(0.0, 0.0);
 
 Random _random = Random();
 TimeSpan _totalSpan = null;
@@ -187,7 +194,7 @@ void main() async {
   });
 
   var totalSpan =
-  TimeSpan(startTime: totalMinTime, duration: totalMaxTime - totalMinTime);
+      TimeSpan(startTime: totalMinTime, duration: totalMaxTime - totalMinTime);
 
   _spans = spans;
   _totalSpan = totalSpan;
@@ -224,18 +231,23 @@ class MyApp extends StatelessWidget {
 }
 
 Vertices _verts;
-double _scale = 1.0;
-Offset _translation = Offset(0, 0);
-PointerScrollEvent _scrollEvent;
+
+class RenderStrip {
+  double startTime;
+  double endTime;
+  int depthLevel;
+  Vertices vertices;
+}
 
 class SomePainter extends CustomPainter {
   void _drawSomeVertices(Canvas canvas, Size size) {
+    //return;
     //_scale = 1.0;
     //if( _random.nextInt(10) == 0 ) {
     //_verts = null;
     //}
     if (_verts == null) {
-      var numRects = 15000;
+      var numRects = 1500;
       // 2 triangles, of 3 vertices, of 2 coordinates
       var numPoints = 2 * 3 * 2 * numRects;
       var xy = Float32List(numPoints * 2 /* for each coord */);
@@ -280,27 +292,30 @@ class SomePainter extends CustomPainter {
     //canvas.translate(size.width*4/5, size.height/4);
     //canvas.translate(-size.width/2, -size.height/2);
 
-    if( _scrollEvent != null ) {
-      print(_scrollEvent);
-      print("before $_translation");
-      //_translation = _scrollEvent.localPosition;
-      print(" after $_translation");
-      var scrollAmount = _scrollEvent.scrollDelta.dy.sign;
-      _translation = _translation.translate( -scrollAmount*_scrollEvent.localPosition.dx / _scale, -scrollAmount*_scrollEvent.localPosition.dy / _scale );
-      _scale += scrollAmount;
-      _scrollEvent = null;
-    }
-    print("scale $_scale");
-    print(_translation);
+    // if( _scrollEvent != null ) {
+    //   print(_scrollEvent);
+    //   print("before $_translation");
+    //   //_translation = _scrollEvent.localPosition;
+    //   print(" after $_translation");
+    //   var scrollAmount = _scrollEvent.scrollDelta.dy.sign;
+    //   _translation = _translation.translate( -scrollAmount*_scrollEvent.localPosition.dx / _scale, -scrollAmount*_scrollEvent.localPosition.dy / _scale );
+    //   _scale += scrollAmount;
+    //   _scrollEvent = null;
+    // }
+    //print("scale $_scale");
+    //print(_translation);
     bool reset = false;
 //    reset = true;
-    if( reset ) {
-      _translation = Offset(0, 0);
-      _scale = 1.5;
-    }
+    // if( reset ) {
+    //   _translation = Offset(0, 0);
+    //   _scale = 1.5;
+    // }
 
-    canvas.translate(_translation.dx - 100 * _scale , _translation.dy  - 100 * _scale);
-    canvas.scale(_scale, _scale);
+    //canvas.translate(_offset.dx + size.width / 2, _offset.dy + size.height / 2);
+    //canvas.translate(-_tempOffset.dx, -_tempOffset.dy);
+    //canvas.scale(_scale.dx * _tempScale.dx, _scale.dy * _tempScale.dy);
+    //canvas.translate(_tempOffset.dx, _tempOffset.dy);
+//    canvas.translate(_tempOffset.dx / (_scale.dx + _tempScale.dx), _tempOffset.dy / (_scale.dy + _tempScale.dy));
     canvas.drawVertices(_verts, BlendMode.color, paint);
     canvas.restore();
 
@@ -312,8 +327,8 @@ class SomePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    _drawSomeVertices(canvas, size);
-    return;
+    //_drawSomeVertices(canvas, size);
+    //return;
     var paint = Paint();
     paint.strokeWidth = 1;
     paint.style = PaintingStyle.fill;
@@ -322,17 +337,20 @@ class SomePainter extends CustomPainter {
     //  _totalSpan = TimeSpan(startTime: _totalSpan.startTime, duration: 10000);
     //paint.blendMode = BlendMode.difference;
 
-    var totalStartTime = max(226888674068.1, _totalSpan.startTime);
-    var totalDuration = min(1250000, _totalSpan.duration);
-    var height = size.height / _spans.length;
+    //var totalStartTime = max(226888674068.1, _totalSpan.startTime);
+    //var totalDuration = min(1250000, _totalSpan.duration);
+    var totalStartTime = _totalSpan.startTime;
+    var totalDuration = _totalSpan.duration;
+    //var height = size.height / _spans.length * size.height / totalDuration;
+    var height = size.height / _spans.length * size.height / totalDuration;
     double y = 0;
     int cnt = 0;
     var stack = Int32List(1024);
-    var limit = 5;
+//    var limit = 500;
     _spans.forEach((int threadId, List<TimeSpan> spans) {
       var stackUsed = 0;
       var maxStackUsed = 0;
-      if (limit-- < 0) return;
+      //if (limit-- < 0) return;
       for (var i = 0; i < spans.length; i++) {
         var span = spans[i];
         while (stackUsed > 0) {
@@ -347,7 +365,7 @@ class SomePainter extends CustomPainter {
             (span.startTime - totalStartTime) * size.width / totalDuration;
         var width = span.duration * size.width / totalDuration;
         var rect =
-        Rect.fromLTWH(start, y + stackUsed * height, width, height - 1);
+            Rect.fromLTWH(start, y + stackUsed * height, width, height - 1);
         paint.color =
             Color.fromARGB(255, cnt % 256, cnt * 5 % 256, cnt * 7 % 256);
         canvas.drawRect(rect, paint);
@@ -384,45 +402,106 @@ class LotsOfThings extends StatefulWidget {
 
 class LotsOfThingsState extends State<LotsOfThings> {
   @override
+  void reassemble() {
+    super.reassemble();
+    _verts = null;
+    _tempScale = Offset(1.0, 1.0);
+    _tempOffset = Offset(0.0, 0.0);
+    _offset = Offset(0.0, 0.0);
+    _scale = Offset(1.0, 1.0);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // var size = Size(
+    //   MediaQuery.of(context).size.width,
+    //   MediaQuery.of(context).size.height - 200,
+    // );
+    print("duration ${_totalSpan.duration}");
+    var size = Size(_totalSpan.duration, _totalSpan.duration);
+    return Zoom(
+        width: size.width,
+        height: size.height,
+        // zoomSensibility: 200,
+        doubleTapZoom: true,
+        // centerOnScale: false,
+        initZoom: 0.0,
+        onPositionUpdate: (Offset position) {
+          print(position);
+        },
+        onScaleUpdate: (double scale, double zoom) {
+          print("$scale  $zoom");
+        },
+        child: CustomPaint(size: Size(1024.0, 1024.0), painter: SomePainter()),
+        );
+  }
+
+  Widget build_old(BuildContext context) {
     return new Listener(
 //      behavior: HitTestBehavior.translucent,
 //      onPointerCancel: ((var p) => print("cancel $p")),
 //      onPointerDown: ((var p) => print("cancel $p")),
-      onPointerSignal: ((PointerSignalEvent signalEvent) {
-          PointerScrollEvent scrollEvent = signalEvent;
-          if( scrollEvent != null ) {
-            setState(() {
-              _scrollEvent = scrollEvent;
-            });
-          }
-      }),
+      onPointerSignal: (var signalEvent) {
+        var scrollEvent = signalEvent as PointerScrollEvent;
+        if (scrollEvent == null) return;
+        setState(() {
+          _offset = _offset.translate(
+            scrollEvent.scrollDelta.dx / _scale.dx,
+            -scrollEvent.scrollDelta.dy / _scale.dy,
+          );
+        });
+      },
 //      onPointerUp: ((var p) => print("cancel $p")),
 //      onPointerMove: ((var p) {
 //        _scale += p.delta.dy;
 //        print("cancel $p");
 //      }),
       child: GestureDetector(
-        //        behavior: HitTestBehavior.opaque,
           onPanUpdate: (var d) {
             setState(() {
-              _translation = _translation.translate(d.delta.dx, d.delta.dy);
+              _offset = _offset.translate(
+                d.delta.dx / _scale.dx,
+                d.delta.dy / _scale.dy,
+              );
             });
-            //print(d);
+          },
+          onLongPressStart: (var d) {
+            setState(() {
+              _tempScale = Offset(1.0, 1.0);
+              _tempOffset = d.localPosition;
+            });
+          },
+          onLongPressEnd: (var d) {
+            setState(() {
+              _tempScale = Offset(1.0, 1.0);
+              _tempOffset = Offset(0.0, 0.0);
+              print("END OF LONG PRESS");
+            });
+          },
+          onLongPressMoveUpdate: (var d) {
+            setState(() {
+              _tempScale = d.localOffsetFromOrigin;
+              var dx = d.localOffsetFromOrigin.dx / 16.0;
+              var dy = d.localOffsetFromOrigin.dy / 16.0;
+              if (dx >= -1 && dx <= 1.0) dx = dx.sign;
+              if (dy >= -1 && dy <= 1.0) dy = dy.sign;
+              _tempScale = Offset(dx, dy);
+              print(
+                  "longPress ${d.globalPosition} ${d.localPosition} ${d.offsetFromOrigin} ${d.localOffsetFromOrigin}");
+            });
+          },
+          onForcePressUpdate: (var d) {
+            setState(() {
+              print("forcePress $d");
+            });
           },
 //        onVerticalDragCancel: () => print("cancel"),
 //        onVerticalDragDown: (var d) => print(d),
 //        onVerticalDragEnd: (var d) => print(d),
 //        onVerticalDragStart: (var d) => print(d),
           child: CustomPaint(
-            size: Size(MediaQuery
-                .of(context)
-                .size
-                .width,
-                MediaQuery
-                    .of(context)
-                    .size
-                    .height - 200),
+            size: Size(MediaQuery.of(context).size.width,
+                MediaQuery.of(context).size.height - 200),
             painter: SomePainter(),
           )),
     );
@@ -477,7 +556,7 @@ class _MyHomePageState extends State<MyHomePage> {
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: Center(
+      body: LotsOfThings(),/*Center(
         // Center is a layout widget. It takes a single child and positions it
         // in the middle of the parent.
         child: Column(
@@ -502,15 +581,12 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             Text(
               '$_counter',
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .display1,
+              style: Theme.of(context).textTheme.display1,
             ),
             LotsOfThings(),
           ],
         ),
-      ),
+      ),*/
       floatingActionButton: FloatingActionButton(
         onPressed: _incrementCounter,
         tooltip: 'Increment',
