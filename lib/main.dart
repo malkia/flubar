@@ -166,8 +166,8 @@ void main() async {
     String op = jsonSpan["ph"];
     if (op != "X") continue;
 
-    double startTime = jsonSpan["ts"] / 1e5;
-    double duration = jsonSpan["dur"] / 1e5;
+    double startTime = jsonSpan["ts"] / 1e4;
+    double duration = jsonSpan["dur"] / 1e4;
     //  String label = jsonSpan["name"];
     var span = TimeSpan(
       startTime: startTime,
@@ -342,10 +342,11 @@ class SomePainter extends CustomPainter {
     var totalStartTime = _totalSpan.startTime;
     var totalDuration = _totalSpan.duration;
     //var height = size.height / _spans.length * size.height / totalDuration;
-    var height = size.height / _spans.length;// * size.height / totalDuration;
+    var height = (size.height / _spans.length);//r * size.height / (3*totalDuration);
+    height = 16.0;
     //print(height);
     //print(totalDuration);
-    double y = 0;
+    double y = size.height/3;
     int cnt = 0;
     var stack = Int32List(1024);
 //    var limit = 500;
@@ -364,12 +365,12 @@ class SomePainter extends CustomPainter {
         stackUsed++;
         maxStackUsed = max(maxStackUsed, stackUsed);
         var start =
-            (span.startTime - totalStartTime);// * size.width / totalDuration;
-        var width = span.duration;// * size.width / totalDuration;
+            (span.startTime - totalStartTime) * size.width / totalDuration;
+        var width = span.duration * size.width / totalDuration;
         var rect =
             Rect.fromLTWH(start, y + stackUsed * height, width, height - 1);
         paint.color =
-            Color.fromARGB(255, cnt % 256, cnt * 5 % 256, cnt * 7 % 256);
+            Color.fromARGB(255, cnt * 3 % 256, cnt * 5 % 256, cnt * 7 % 256);
         canvas.drawRect(rect, paint);
         cnt++;
       }
@@ -424,22 +425,21 @@ class LotsOfThingsState extends State<LotsOfThings> {
     return Zoom(
         width: size.width,
         height: size.height,
-        opacityScrollBars: 1.0,
-        scrollWeight: 64.0,
         backgroundColor: Colors.amber[50],
         canvasColor: Colors.amber[100],
         //colorScrollBars: Colors.red,
-        zoomSensibility: 100.0,
+        //zoomSensibility: 5.0,
         doubleTapZoom: true,
         centerOnScale: true,
-        initZoom: 0.0,
+        //initZoom: 0.0,
+        //scrollWeight: 100.0,
         onPositionUpdate: (Offset position) {
           print(position);
         },
         onScaleUpdate: (double scale, double zoom) {
           print("$scale  $zoom");
         },
-        child: CustomPaint(size: Size(1024.0, 1024.0), painter: SomePainter()),
+        child: CustomPaint(size: Size(10240.0, 10240.0), painter: SomePainter()),
         );
   }
 
