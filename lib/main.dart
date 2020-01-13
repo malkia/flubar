@@ -8,6 +8,33 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:zoom_widget/zoom_widget.dart';
+import 'package:photo_view/photo_view.dart';
+
+var outScale = 1.0;
+var outPosition = Offset(0.0, 0.0);
+
+Offset globalPan = Offset(0.0, 0.0);
+Offset globalScale = Offset(0.01, 1.0);
+Offset headPan = Offset(0.0, 0.0);
+Offset restPan = Offset(0.0, 0.0);
+Offset headScale = Offset(0.0, 0.0);
+Offset restScale = Offset(0.0, 0.0);
+double localAdjustment = 0;
+
+Offset get currentPan {
+  Offset ofs = globalPan + headPan - restPan;
+//  var dx = min(max(ofs.dx, -1000.0), 1500.0);
+  //var dy = min(max(ofs.dy, -1000.0), 1500.0);
+  return Offset(ofs.dx + localAdjustment,ofs.dy);
+}
+
+Offset get currentScale {
+  double dx = globalScale.dx * restScale.dx;
+  double dy = globalScale.dy * restScale.dy;
+  dx = min(max(dx, 0.01), 100.0);
+  dy = min(max(dy, 0.01), 100.0);
+  return Offset( dx, dy );
+}
 
 class TimeSpan {
   final double startTime;
@@ -166,8 +193,8 @@ void main() async {
     String op = jsonSpan["ph"];
     if (op != "X") continue;
 
-    double startTime = jsonSpan["ts"] / 1e4;
-    double duration = jsonSpan["dur"] / 1e4;
+    double startTime = jsonSpan["ts"] / 1e3;
+    double duration = jsonSpan["dur"] / 1e3;
     //  String label = jsonSpan["name"];
     var span = TimeSpan(
       startTime: startTime,
@@ -342,19 +369,23 @@ class SomePainter extends CustomPainter {
     var totalStartTime = _totalSpan.startTime;
     var totalDuration = _totalSpan.duration;
     //var height = size.height / _spans.length * size.height / totalDuration;
-    var height = (size.height / _spans.length);//r * size.height / (3*totalDuration);
-    height = 16.0;
+    //var height = (size.height / _spans.length);//r * size.height / (3*totalDuration);
+    double height = 16.0; // outScale;// / outScale;//16.0 / (sqrt(outScale));
+    double ooScale = 1.0; // outScale;
     //print(height);
     //print(totalDuration);
-    double y = size.height/3;
+    print("scale $currentPan $currentScale");
+    double x = -currentPan.dx;// * currentScale.dx;///outPosition.dy;//size.height/3;// / outScale;
+    double y = -currentPan.dy;//outPosition.dx / outScale;
     int cnt = 0;
     var stack = Int32List(1024);
-//    var limit = 500;
+    var limit = 10;
     _spans.forEach((int threadId, List<TimeSpan> spans) {
-      var stackUsed = 0;
-      var maxStackUsed = 0;
-      //if (limit-- < 0) return;
-      for (var i = 0; i < spans.length; i++) {
+      spans = _spans[94332];
+      int stackUsed = 0;
+      int maxStackUsed = 0;
+      if (limit-- < 0) return;
+      for (var i = 0; i < spans.length/4; i++) {
         var span = spans[i];
         while (stackUsed > 0) {
           var parentIndex = stack[stackUsed - 1];
@@ -364,15 +395,20 @@ class SomePainter extends CustomPainter {
         stack[stackUsed] = i;
         stackUsed++;
         maxStackUsed = max(maxStackUsed, stackUsed);
-        var start =
-            (span.startTime - totalStartTime) * size.width / totalDuration;
-        var width = span.duration * size.width / totalDuration;
-        var rect =
-            Rect.fromLTWH(start, y + stackUsed * height, width, height - 1);
-        paint.color =
-            Color.fromARGB(255, cnt * 3 % 256, cnt * 5 % 256, cnt * 7 % 256);
-        canvas.drawRect(rect, paint);
-        cnt++;
+        double start = x + 
+            (span.startTime - totalStartTime) * currentScale.dx;
+        double width = span.duration * currentScale.dx;
+        Rect r = Rect.fromLTWH(start, y + stackUsed * height, width, height - ooScale);
+        paint.color = Color.fromARGB(255, cnt * 3 % 256, cnt * 5 % 256, cnt * 7 % 256);
+        canvas.drawRect(r, paint);
+        if( width > 30 )
+        {
+          TextSpan textSpan = new TextSpan(style: new TextStyle(color: Colors.white), text: "blah");
+          TextPainter tp = new TextPainter(text: textSpan, textAlign: TextAlign.left, textDirection: TextDirection.ltr);
+          tp.layout();
+          tp.paint(canvas, r.topLeft );
+        }
+         cnt++;
       }
       y += height * (maxStackUsed + 1);
     });
@@ -404,6 +440,34 @@ class LotsOfThings extends StatefulWidget {
 }
 
 class LotsOfThingsState extends State<LotsOfThings> {
+  PhotoViewControllerBase _photoViewController;
+  PhotoViewScaleStateController _photoViewScaleStateController;
+
+ @override
+  void initState() {
+    _photoViewController = PhotoViewController()
+      ..scale = 1.0
+      ..outputStateStream.listen((PhotoViewControllerValue event) {
+        outScale = event.scale;
+        outPosition = event.position;
+        //print("photoViewController $event, ${_photoViewScaleStateController.scaleState}")
+      });
+
+    _photoViewScaleStateController = PhotoViewScaleStateController()
+//    ..
+      ..addIgnorableListener(() => {
+
+      });
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    _photoViewController.dispose();
+    _photoViewScaleStateController.dispose();
+    super.dispose();
+  }
+
   @override
   void reassemble() {
     super.reassemble();
@@ -420,27 +484,110 @@ class LotsOfThingsState extends State<LotsOfThings> {
     //   MediaQuery.of(context).size.width,
     //   MediaQuery.of(context).size.height - 200,
     // );
-    print("duration ${_totalSpan.duration}");
+//    print("duration ${_totalSpan.duration}");
     var size = Size(_totalSpan.duration, _totalSpan.duration);
-    return Zoom(
-        width: size.width,
-        height: size.height,
-        backgroundColor: Colors.amber[50],
-        canvasColor: Colors.amber[100],
-        //colorScrollBars: Colors.red,
-        //zoomSensibility: 5.0,
-        doubleTapZoom: true,
-        centerOnScale: true,
-        //initZoom: 0.0,
-        //scrollWeight: 100.0,
-        onPositionUpdate: (Offset position) {
-          print(position);
+    // return Zoom(
+    //     width: size.width,
+    //     height: size.height,
+    //     backgroundColor: Colors.amber[50],
+    //     canvasColor: Colors.green,
+    //     //colorScrollBars: Colors.red,
+    //     //zoomSensibility: 5.0,
+    //     doubleTapZoom: true,
+    //     centerOnScale: true,
+    //     //initZoom: 0.0,
+    //     //scrollWeight: 100.0,
+    //     onPositionUpdate: (Offset position) {
+    //       print(position);
+    //     },
+    //     onScaleUpdate: (double scale, double zoom) {
+    //       print("$scale  $zoom");
+    //     },
+    //     child: CustomPaint(size: Size(10240.0, 10240.0), painter: SomePainter()),
+    //     );
+    return Listener(
+//      behavior: HitTestBehavior.translucent,
+//      onPointerCancel: ((var p) => print("cancel $p")),
+//      onPointerDown: ((var p) => print("cancel $p")),
+      onPointerSignal: (var signalEvent) {
+        var scrollEvent = signalEvent as PointerScrollEvent;
+        if (scrollEvent == null) return;
+          var dx = scrollEvent.scrollDelta.dx.sign / 100.0;
+          var dy = scrollEvent.scrollDelta.dy.sign / 100.0;
+          dx = dx + 1.0;
+          dy = dy + 1.0;
+          restScale = restScale.scale( dy, 1.0 ); //(dx, dy);
+          print( "$dx $dy");
+        setState(() {
+        });
+      },
+    child: GestureDetector(
+//        controller: _photoViewController,
+        //scaleStateController: _photoViewScaleStateController,
+  //      scaleStateChangedCallback: (PhotoViewScaleState state) => {
+   //       print("state $state")
+    //    },
+     //   minScale: 0.0001,
+      //  maxScale: 10000.0,
+       // initialScale: 1.0,
+        //enableRotation: true,
+        behavior: HitTestBehavior.deferToChild,
+        onScaleStart: (ScaleStartDetails d) {
+          headPan = d.localFocalPoint;
+          restPan = headPan;
+          headScale = currentScale;
+          localAdjustment = 0;
+          setState(() {
+          });
         },
-        onScaleUpdate: (double scale, double zoom) {
-          print("$scale  $zoom");
+        onScaleUpdate: (ScaleUpdateDetails d) {
+          restPan = d.localFocalPoint;
+          //print("update head=$headPan rest=$restPan");
+          restScale = Offset( d.horizontalScale, d.verticalScale );
+          localAdjustment = currentPan.dx * (headScale.dx - currentScale.dx);
+          print("adjustment $localAdjustment");
+          setState(() {
+          });
         },
-        child: CustomPaint(size: Size(10240.0, 10240.0), painter: SomePainter()),
-        );
+        onScaleEnd: (ScaleEndDetails d) {
+          // globalPan is not scaled
+          // restPan is not scaled too.
+          // now user at position restPan
+          // 
+          // globalPan hasn't changed.
+          // localPan shows where we have to scale at
+          // prevScale is the previous scale
+          // currentScale is the current scale
+
+          // globalPan = 100
+          // scale = 10
+          // localPan = 50
+          // 
+          // focusPoint = globalPanA + localPan * scaleA
+          //
+          // scale = 20
+          //
+          // focusPoint = globalPanB + localPan * scaleB
+          //
+          // globalPanA + localPan * scaleA = globalPanB + localPan * scaleB
+          // globalPanA = globalPanB + localPan * (scaleB - scaleA)
+          // globalPanB = globalPanA + localPan * (scaleA - scaleB)
+
+          var prevScale = headScale;
+          //print("adjustment $adjustment prev=${prevScale.dx} cur=${headScale.dx}");
+          globalPan = currentPan;
+          globalScale = currentScale;
+          headPan = Offset(0.0, 0.0);
+          restPan = Offset(0.0, 0.0);
+          headScale = Offset(0.0, 0.0);
+          restScale = Offset(1.0, 1.0);
+          localAdjustment = 0;
+          setState(() {
+          });
+        },
+        child: CustomPaint( size: Size(MediaQuery.of(context).size.width,
+                MediaQuery.of(context).size.height), painter: SomePainter()),
+        ));
   }
 
   Widget build_old(BuildContext context) {
@@ -506,6 +653,7 @@ class LotsOfThingsState extends State<LotsOfThings> {
 //        onVerticalDragDown: (var d) => print(d),
 //        onVerticalDragEnd: (var d) => print(d),
 //        onVerticalDragStart: (var d) => print(d),
+          behavior: HitTestBehavior.translucent,
           child: CustomPaint(
             size: Size(MediaQuery.of(context).size.width,
                 MediaQuery.of(context).size.height - 200),

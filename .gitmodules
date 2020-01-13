@@ -1,0 +1,3 @@
+[submodule "photo_view"]
+	path = photo_view
+	url = https://github.com/renancaraujo/photo_view
